@@ -8,18 +8,22 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.10,<4.0"
 dependencies = [
-    "octobot (>=2.0.10,<3.0.0)"
-    
+    "octobot (>=2.0.10,<3.0.0)",
 ]
 
 [tool.poetry]
 packages = [{include = "request_evaluator", from = "src/Evaluator/TA/"}]
 
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.0"
+ruff = "^0.11.12"
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-update = "scripts.update:main"
-start = "scripts.start:main"
+update = "scripts.update:main"  # Re-install the local tentacle. (for development)
+start = "scripts.start:main"    # Just runs OctoBot cmd.
+pack = "scripts.pack:main"      # Pack to zip for release

@@ -1,8 +1,10 @@
 
 import typing
-
+import numpy as np
+import httpx
 import octobot_commons.enums as enums
 import octobot_evaluators.evaluators as evaluators
+import octobot_evaluators.util as evaluators_util
 import octobot_trading.api as trading_api
 
 class RequestEvaluator(evaluators.TAEvaluator):
@@ -13,6 +15,8 @@ class RequestEvaluator(evaluators.TAEvaluator):
     def __init__(self, tentacles_setup_config):
         super().__init__(tentacles_setup_config)
         self.history_length = 30
+
+        self._client = httpx.AsyncClient(timeout=5.0)
 
 
     def init_user_inputs(self, inputs: dict) -> None:
@@ -50,23 +54,46 @@ class RequestEvaluator(evaluators.TAEvaluator):
 
     async def evaluate(self, cryptocurrency, symbol, time_frame, candle_data, candle):
         """ Send request to external API and await response. """
+
+        payload = {
+            "symbol": self.symbol,
+            "time_frame": time_frame,
+            "candle": candle,
+            "candle_data": candle_data,
+        }
+        try:
+            response = await self._client.post(str(self.url), json=serialize_payload(payload))
+            response.raise_for_status()
+            score = float(response.json().get("score", 0))
+            self.eval_note = max(-1.0, min(score, 1.0))
+
+        except Exception as e:
+            self.logger.exception(e)
+            self.eval_note = 0
+
+
+        await self.evaluation_completed(cryptocurrency, symbol, time_frame, eval_time=evaluators_util.get_eval_time(full_candle=candle, time_frame=time_frame) )
         
-        pass
-        # updated_value = False
-        # if candle_data is not None and len(candle_data) > self.period_length: # type: ignore
-        #     rsi_v = tulipy.rsi(candle_data, period=self.period_length)
-        #     if len(rsi_v) and not math.isnan(rsi_v[-1]):
-        #         is condition:
-        #             self.set_eval_note((rsi_v[-1] - 100) / 200)
-        #         else:
-        #             self.eval_note = 0
-        #             if rsi_v[-1] >= self.short_threshold:
-        #                 self.eval_note = 1
-        #             elif rsi_v[-1] <= self.long_threshold:
-        #                 self.eval_note = -1
-        #         updated_value = True
-        # else:
-        #     self.eval_note = 0
-        # await self.evaluation_completed(cryptocurrency, symbol, time_frame,
-        #                                 eval_time=evaluators_util.get_eval_time(full_candle=candle,
-        #                                                                         time_frame=time_frame))
+def serialize_payload(obj: dict) -> dict:
+    """
+    Recursively serializes a dictionary object to ensure all values are JSON serializable.
+    Handles conversion of numpy arrays to lists and processes nested dictionaries and lists.
+    Args:
+        obj (dict): The dictionary object to serialize.
+    Returns:
+        dict: A dictionary with all values converted to JSON serializable formats.
+    Example:
+        >>> import numpy as np
+        >>> data = {'array': np.array([1, 2, 3]), 'nested': {'value': np.array([4, 5])}}
+        >>> serialize_payload(data)
+        {'array': [1, 2, 3], 'nested': {'value': [4, 5]}}
+    """
+
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: serialize_payload(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [serialize_payload(v) for v in obj]
+    else:
+        return obj

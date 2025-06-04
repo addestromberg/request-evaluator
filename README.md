@@ -38,3 +38,15 @@ This tentacle enables:
 2. Open the **OctoBot UI**.
 3. Navigate to `Tentacles > Install` and upload the `.zip` file.
 4. Done!
+
+---
+
+## 🗂️ Important!
+
+The api needs to respond with a json object with a float "score" field. The field will be clamped between -1 to 1.
+
+Example response:
+
+```json
+{"score": 0.65}
+```
