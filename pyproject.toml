@@ -1,0 +1,25 @@
+[project]
+name = "request-evaluator"
+version = "0.1.0"
+description = "An Octobot evaluator tentacle. Makes a request to specified API endpoint and expects a valid evaluation from -1 to 1 as response."
+authors = [
+    {name = "Adde Stromberg",email = "adde@upperfield.se"}
+]
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "octobot (>=2.0.10,<3.0.0)"
+    
+]
+
+[tool.poetry]
+packages = [{include = "request_evaluator", from = "src/Evaluator/TA/"}]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+update = "scripts.update:main"
+start = "scripts.start:main"
