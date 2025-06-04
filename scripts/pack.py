@@ -7,9 +7,9 @@ def main():
     cmd = [
         "OctoBot", "tentacles",
         "--pack",
-        "pack/request_tentacle.zip"
+        "../pack/request_tentacle.zip",
         "--directory",
-        "src/Evaluator/TA/request_evaluator",
+        "src/",
     ]
     result = subprocess.run(cmd)
     if result.returncode != 0:

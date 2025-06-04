@@ -1,6 +1,6 @@
 [project]
 name = "request-evaluator"
-version = "0.1.0"
+version = "1.0.0"
 description = "An Octobot evaluator tentacle. Makes a request to specified API endpoint and expects a valid evaluation from -1 to 1 as response."
 authors = [
     {name = "Adde Stromberg",email = "adde@upperfield.se"}
