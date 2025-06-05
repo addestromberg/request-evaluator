@@ -10,12 +10,13 @@ import tulipy
 
 class RequestEvaluator(evaluators.TAEvaluator):
     HISTORY_LENGTH = "history_length"
+    MAX_LENGTH_TO_EXTERNAL = "max_length_to_external"
     URL = "url"
     TIMEOUT = "timeout"
     BASIC_AUTH = "basic_auth"
     BASIC_AUTH_USERNAME = "auth_username"
     BASIC_AUTH_PASSWORD = "auth_password"
-    SCORE_FIELD= "score_field"
+    SCORE_FIELD = "score_field"
     RSI_PERIOD = "rsi_period"
     BB_PERIOD = "bb_period"
     BB_STD = "bb_std"
@@ -29,6 +30,7 @@ class RequestEvaluator(evaluators.TAEvaluator):
     def __init__(self, tentacles_setup_config):
         super().__init__(tentacles_setup_config)
         self.history_length = 60
+        self.max_length_to_external = 10
         self.timeout = 5.0
         self.score_field = "score"
         self.rsi_period = 14
@@ -54,6 +56,17 @@ class RequestEvaluator(evaluators.TAEvaluator):
             min_val=1,
             title="History Length",
         )
+
+        self.period_length = self.UI.user_input(
+            self.MAX_LENGTH_TO_EXTERNAL,
+            enums.UserInputTypes.INT,
+            default_config["max_length_to_external"],
+            inputs,
+            min_val=1,
+            max_val=100,
+            title="Max length to external",
+        )
+
         self.url = self.UI.user_input(
             self.URL, enums.UserInputTypes.TEXT, default_config["url"], inputs, title="Request URL"
         )
@@ -196,6 +209,7 @@ class RequestEvaluator(evaluators.TAEvaluator):
     def get_default_config(
         cls,
         history_length: typing.Optional[float] = None,
+        max_length_to_external: int = 10,
         url: typing.Optional[str] = None,
         basic_auth: bool = False,
         username: typing.Optional[str] = None,
@@ -210,25 +224,26 @@ class RequestEvaluator(evaluators.TAEvaluator):
         atr_period: int = 5,
         short_ma_period: int = 20,
         long_ma_period: int = 50,
-        score_field: str = "score"
+        score_field: str = "score",
     ):
         return {
             cls.HISTORY_LENGTH: history_length or 2,
+            cls.MAX_LENGTH_TO_EXTERNAL: max_length_to_external or 10,
             cls.URL: url or "https://",
             cls.BASIC_AUTH: basic_auth or False,
             cls.BASIC_AUTH_USERNAME: username or "",
             cls.BASIC_AUTH_PASSWORD: password or "",
-            cls.TIMEOUT:timeout or 2.0,
-            cls.RSI_PERIOD:rsi_period or 14,
-            cls.BB_PERIOD:bb_period or 20,
-            cls.BB_STD:bb_std or 2,
-            cls.MACD_FAST:macd_fast or 12,
-            cls.MACD_SLOW:macd_slow or 26,
-            cls.MACD_SIGNAL:macd_signal or 9,
-            cls.ATR_PERIOD:atr_period or 5,
-            cls.SHORT_MA_PERIOD:short_ma_period or 20,
-            cls.LONG_MA_PERIOD:long_ma_period or 50,
-            cls.SCORE_FIELD:score_field or "score"
+            cls.TIMEOUT: timeout or 2.0,
+            cls.RSI_PERIOD: rsi_period or 14,
+            cls.BB_PERIOD: bb_period or 20,
+            cls.BB_STD: bb_std or 2,
+            cls.MACD_FAST: macd_fast or 12,
+            cls.MACD_SLOW: macd_slow or 26,
+            cls.MACD_SIGNAL: macd_signal or 9,
+            cls.ATR_PERIOD: atr_period or 5,
+            cls.SHORT_MA_PERIOD: short_ma_period or 20,
+            cls.LONG_MA_PERIOD: long_ma_period or 50,
+            cls.SCORE_FIELD: score_field or "score",
         }
 
     async def ohlcv_callback(
@@ -241,7 +256,6 @@ class RequestEvaluator(evaluators.TAEvaluator):
         candle,
         inc_in_construction_data,
     ):
-        
         # We want to pass all the data.
         timestamp = trading_api.get_symbol_time_candles(
             self.get_exchange_symbol_data(exchange, exchange_id, symbol),
@@ -281,41 +295,81 @@ class RequestEvaluator(evaluators.TAEvaluator):
             include_in_construction=inc_in_construction_data,
         )
 
-        candle_data = {"timestamp": timestamp, "open": open, "high": high, "low": low, "close": close, "volume": volume}
+        candle_data = {
+            "timestamp": timestamp,
+            "open": open,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": volume,
+        }
 
         await self.evaluate(cryptocurrency, symbol, time_frame, candle_data, candle)
 
     async def evaluate(self, cryptocurrency, symbol, time_frame, candle_data, candle):
         """Send request to external API and await response."""
         # Check the timeout value
+        
         if isinstance(self.timeout, float):
             to = self.timeout
         else:
             to = 5.0
 
         if self.is_basic_auth:
-            client = httpx.AsyncClient(timeout=to, auth=httpx.BasicAuth(str(self.username), str(self.password)))
+            client = httpx.AsyncClient(
+                timeout=to, auth=httpx.BasicAuth(str(self.username), str(self.password))
+            )
         else:
             client = httpx.AsyncClient(timeout=to)
 
         # Pass selected indicators
         rsi = tulipy.stochrsi(real=candle_data.get("close"), period=self.rsi_period)
-        bbands_lower, bbands_middle, bbands_upper = tulipy.bbands(real=candle_data.get("close"),period=self.bb_period, stddev=self.bb_std)
-        macd, signal, hist = tulipy.macd(real=candle_data.get("close"), short_period=self.macd_fast, long_period=self.macd_slow, signal_period=self.macd_signal)
-        atr = tulipy.atr(high=candle_data.get("high"), low=candle_data.get("low"), close=candle_data.get("close"), period=self.atr_period)
+        bbands_lower, bbands_middle, bbands_upper = tulipy.bbands(
+            real=candle_data.get("close"), period=self.bb_period, stddev=self.bb_std
+        )
+        macd, signal, hist = tulipy.macd(
+            real=candle_data.get("close"),
+            short_period=self.macd_fast,
+            long_period=self.macd_slow,
+            signal_period=self.macd_signal,
+        )
+        atr = tulipy.atr(
+            high=candle_data.get("high"),
+            low=candle_data.get("low"),
+            close=candle_data.get("close"),
+            period=self.atr_period,
+        )
         short_ma = tulipy.sma(real=candle_data.get("close"), period=self.short_ma_period)
         long_ma = tulipy.sma(real=candle_data.get("close"), period=self.long_ma_period)
+
+        candle_data["timestamp"] = get_num_last_rows(candle_data["timestamp"], self.max_length_to_external)
+        candle_data["open"] = get_num_last_rows(candle_data["open"], self.max_length_to_external)
+        candle_data["high"] = get_num_last_rows(candle_data["high"], self.max_length_to_external)
+        candle_data["low"] = get_num_last_rows(candle_data["low"], self.max_length_to_external)
+        candle_data["close"] = get_num_last_rows(candle_data["close"], self.max_length_to_external)
+        candle_data["volume"] = get_num_last_rows(candle_data["volume"], self.max_length_to_external)
 
         payload = {
             "symbol": symbol,
             "time_frame": time_frame,
             "last_candle": candle,
             "history": candle_data,
-            "stochastic_rsi": rsi,
-            "bollinger_band": {"upper": bbands_upper, "middle": bbands_middle, "lower": bbands_lower},
-            "macd": {"macd": macd, "signal": signal, "hist": hist},
-            "atr": atr,
-            "moving_avg": {f"ma_{self.short_ma_period}": short_ma, f"ma_{self.long_ma_period}": long_ma}
+            "stochastic_rsi": get_num_last_rows(rsi, self.max_length_to_external),
+            "bollinger_band": {
+                "upper": get_num_last_rows(bbands_upper, self.max_length_to_external),
+                "middle": get_num_last_rows(bbands_middle, self.max_length_to_external),
+                "lower": get_num_last_rows(bbands_lower, self.max_length_to_external),
+            },
+            "macd": {
+                "macd": get_num_last_rows(macd, self.max_length_to_external),
+                "signal": get_num_last_rows(signal, self.max_length_to_external),
+                "hist": get_num_last_rows(hist, self.max_length_to_external),
+            },
+            "atr": get_num_last_rows(atr, self.max_length_to_external),
+            "moving_avg": {
+                f"ma_{self.short_ma_period}": get_num_last_rows(short_ma, self.max_length_to_external),
+                f"ma_{self.long_ma_period}": get_num_last_rows(long_ma, self.max_length_to_external),
+            },
         }
 
         try:
@@ -334,6 +388,22 @@ class RequestEvaluator(evaluators.TAEvaluator):
             time_frame,
             eval_time=evaluators_util.get_eval_time(full_candle=candle, time_frame=time_frame),
         )
+
+
+def get_num_last_rows(rows: list[typing.Any], num: int) -> list[typing.Any]:
+    """
+    Returns a list containing the last `num` rows of the input list, excluding the very last row.
+    Args:
+        rows (list[typing.Any]): The list from which to extract rows.
+        num (int): The number of rows to extract from the end of the list.
+    Returns:
+        list[typing.Any]: A list containing the last `num` rows, excluding the very last row.
+    Note:
+        This function returns rows[-num:-1], which means it will return elements
+        from index len(rows)-num to len(rows)-2 (inclusive). The very last element
+        at index -1 is excluded.
+    """
+    return rows[(-num-1):-1]
 
 
 def serialize_payload(obj: dict) -> dict:
